@@ -5,11 +5,11 @@
  *      Author: liushuo
  */
 
-void e_1_8();
+#include "liushuo.h"
 
 int main()
 {
-	e_1_8();
+	e_3_5_2();
 	return 0;
 }
 
