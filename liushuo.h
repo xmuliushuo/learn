@@ -17,5 +17,9 @@ void e_2_11();
 void e_3_1();
 void e_3_5_1();
 void e_3_5_2();
+void e_3_7_1();
+void e_3_7_2();
+void e_3_8_1();
+void e_3_8_2();
 
 #endif /* LIUSHUO_H_ */
