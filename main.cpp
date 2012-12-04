@@ -9,7 +9,7 @@
 
 int main()
 {
-	e_4_32();
+	PP_1_1();
 	return 0;
 }
 
