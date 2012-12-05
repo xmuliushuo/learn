@@ -27,5 +27,6 @@ void e_4_30();
 void e_4_32();
 
 void PP_1_1();
+void PP_1_2();
 
 #endif /* LIUSHUO_H_ */

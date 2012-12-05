@@ -9,7 +9,7 @@
 
 int main()
 {
-	PP_1_1();
+	PP_1_2();
 	return 0;
 }
 
