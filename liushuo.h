@@ -27,6 +27,8 @@ void e_4_30();
 void e_4_32();
 void e_5_18();
 void e_7_31();
+void e_8_3();
+void e_8_6();
 
 void PP_1_1();
 void PP_1_2();
