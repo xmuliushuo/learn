@@ -30,6 +30,7 @@ void e_7_31();
 void e_8_3();
 void e_8_6();
 void e_9_26();
+void e_9_28();
 
 void PP_1_1();
 void PP_1_2();
