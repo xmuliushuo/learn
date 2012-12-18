@@ -6,17 +6,16 @@
  */
 
 #include "textquery.h"
-#include <istream>
+#include <sstream>
+#include <algorithm>
+#include <stdexcept>
 
-using std::ifstream;
-using std::string;
-using std::istringstream;
-using std::vector;
+using namespace std;
 
-void TextQuery::store_file(ifstream& in)
+void TextQuery::store_file(ifstream &is)
 {
 	string line;
-	while(getline(in, line)) {
+	while(getline(is, line)) {
 		lines_of_text.push_back(line);
 	}
 }
@@ -34,4 +33,20 @@ void TextQuery::build_map()
 		}
 		iss.clear();
 	}
+}
+
+set<TextQuery::line_no> TextQuery::run_query(const std::string &query_word) const
+{
+	map<string, set<line_no> >::const_iterator loc = word_map.find(query_word);
+	if (loc == word_map.end())
+		return set<line_no>();
+	else
+		return loc->second;
+}
+
+string TextQuery::text_line(TextQuery::line_no line) const
+{
+	if (line < lines_of_text.size())
+		return lines_of_text[line];
+	throw out_of_range("line number out of range");
 }
