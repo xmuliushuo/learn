@@ -15,20 +15,10 @@
 // +#include <linux/hash.h>
 // +#include <asm/uaccess.h>
 // +
-// +static const int cscan_hash_shift = 5;
-// +#define DL_HASH_BLOCK(sec)      ((sec) >> 3)
-// +#define DL_HASH_FN(sec)         \
-// +        (hash_long(DL_HASH_BLOCK((sec)),cscan_hash_shift))
-// +#define DL_HASH_ENTRIES         (1 << cscan_hash_shift)
-// +#define rq_hash_key(rq)         ((rq)->sector + (rq)->nr_sectors)
-// +#define list_entry_hash(ptr)    list_entry((ptr), struct CSCAN_request, hash)
-// +#define ON_HASH(crq)            (crq)->on_hash
-// +
 // +
 // +#define RB_NONE         (2)
 // +#define RB_EMPTY(root)  ((root)->rb_node == NULL)
 // +#define ON_RB(node)     ((node)->rb_color != RB_NONE)
-// +#define RB_CLEAR(node)  ((node)->rb_color = RB_NONE)
 // +#define rq_rb_key(rq)   (rq)->sector
 // +
 // +/*
@@ -102,29 +92,6 @@
 // +        return NULL;
 // +}
 // +
-// +static inline void
-// +cscan_del_crq_rb(struct CSCAN_data *cd, struct CSCAN_request *crq)
-// +{
-// +        rb_erase(&crq->rb_node, &cd->sort_list[crq->queue_id]);
-// +        RB_CLEAR(&crq->rb_node);
-// +        cd->count[crq->queue_id]--;
-// +}
-// +
-// +static inline void
-// +cscan_add_crq_rb(struct CSCAN_data *cd, struct CSCAN_request *crq)
-// +{
-// +        rb_insert_request(&cd->sort_list[crq->queue_id],crq);
-// +        cd->count[crq->queue_id]++;
-// +
-// +}
-// +static inline void
-// +cscan_del_crq_hash(struct CSCAN_request * crq) {
-// +        if(ON_HASH(crq)) {
-// +                crq->on_hash = 0;
-// +                list_del_init(&crq->hash);
-// +        }
-// +}
-// +
 // +static struct request * 
 // +cscan_find_rq_hash(struct CSCAN_data *cd, sector_t sector) {
 // +        struct list_head *hash_list = &cd->hash[DL_HASH_FN(sector)];
@@ -151,35 +118,53 @@
 // +
 // +
 // +}
-// +
-// +static inline void
-// +cscan_add_crq_hash(struct CSCAN_data * cd, struct CSCAN_request * crq) {
-// +        struct request *rq = crq->request;
-// +
-// +        BUG_ON(ON_HASH(crq));
-// +        crq->on_hash = 1;
-// +        list_add(&crq->hash, &cd->hash[DL_HASH_FN(rq_hash_key(rq))]);
-// +}
-// +
-// +static void
-// +cscan_remove_request(struct CSCAN_data *cd, struct CSCAN_request * crq,
-// +                                int queue) {
-// +        struct request * rq;
-// +        
-// +        cscan_del_crq_hash(crq);
-// +        rq = crq->request;
-// +        list_add_tail(&rq->queuelist, cd->dispatch);
-// +        cscan_del_crq_rb(cd,crq);
-// +}
-// +
-// +static int
-// +cscan_move_requests_to_dispatch_queue(struct CSCAN_data * cd,int queue) {
+#include <linux/elevator.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/compiler.h>
+
+struct cscan_rq {
+	struct request* request;   
+	unsigned char queue_id; /* Which queue is this request on */
+};
+
+struct cscan_data {
+	struct list_head sort_list[2];
+	unsigned int curr;
+	unsigned int count[2];
+	struct list_head * dispatch;    
+	mempool_t *crq_pool;
+	sector_t last_sector;
+};
+
+static kmem_cache_t* crq_pool;
+
+static inline void cscan_del_crq(struct cscan_data *cd, struct cscan_request *crq)
+{
+	list_del_init(&crq->sort_list[crq->queue_id]);
+	cd->count[crq->queue_id]--;
+}
+
+static inline void cscan_add_crq(struct cscan_data *cd, struct cscan_request *crq)
+{
+// +        rb_insert_request(&cd->sort_list[crq->queue_id],crq);
+	// TODO 把请求插入到队列中
+	cd->count[crq->queue_id]++;
+}
+
+// 把crq对应的request添加到调度队列，并且删除之
+static void cscan_remove_request(struct cscan_data *cd, struct cscan_request *crq, int queue) {
+	struct request * rq;
+	rq = crq->request;
+	list_add_tail(&rq->queuelist, cd->dispatch);
+	cscan_del_crq(cd, crq);
+}
+
+static int cscan_move_requests_to_dispatch_queue(struct cscan_data *cd, int queue) {
 // +        struct rb_node * node;
 // +        struct CSCAN_request * crq;
-// +        int ret = 0;
-// +        
+	int ret = 0;
 // +        node = rb_first(&cd->sort_list[queue]);
-// +                
 // +        while(node) {
 // +                crq  = rb_entry(node,struct CSCAN_request,rb_node);
 // +                node = rb_next(node);
@@ -187,74 +172,34 @@
 // +                ret = 1;
 // +        }
 // +
-// +        return ret;
-// +}
-// +
-// +static int 
-// +cscan_dispatch_requests(struct CSCAN_data * cd) {
-// +        int ret1,ret2;
-// +        
-// +        ret1 = cscan_move_requests_to_dispatch_queue(cd,cd->curr);
-// +        ret2 = cscan_move_requests_to_dispatch_queue(cd,1 - cd->curr);
-// +        
-// +        cd->curr = 1 - cd->curr;
-// +        // Return 1 if you have dispatched requests
-// +        return (ret1 || ret2);      
-// +}
-// +
+	return ret;
+}
 
-#include <linux/elevator.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/compiler.h>
-
-struct cscan_rq {
-// +        struct rb_node rb_node;
-// +        sector_t rb_key;
-	struct request* request;
-// +        
-// +        struct list_head hash;
-// +        char on_hash;
-// +        
-// +        unsigned char queue_id; /* Which queue is this request on */
-};
-
-struct cscan_data {
-	struct list_head sort_list[2];
-// +        unsigned int curr;
-// +        struct rb_root sort_list[2]; /* Used to keep a sorted list of requests*/
-// +        unsigned int count[2];
-// +        
-// +        struct list_head * dispatch;
-// +        struct list_head * hash;
-// +        
-	mempool_t *crq_pool;/* Pool of requests*/
-// +
-// +        sector_t last_sector;
-};
-
-static kmem_cache_t* crq_pool;
+// 把调度器队列中的请求分发到块设备的请求队列。
+static int cscan_dispatch_requests(struct cscab_data *cd) {
+	int ret1,ret2;
+	ret1 = cscan_move_requests_to_dispatch_queue(cd,cd->curr);
+	ret2 = cscan_move_requests_to_dispatch_queue(cd,1 - cd->curr);   
+	cd->curr = 1 - cd->curr;
+	// Return 1 if you have dispatched requests
+	return (ret1 || ret2);      
+}
 
 static void cscan_add_request(struct request_queue *q, struct request *rq) {
 	struct cscan_data *cd = q->elevator->elevator_data;
-	struct cscan_rq *crq = (struct CSCAN_request*)rq->elevator_private;
-// +
-// +        crq->rb_key = rq_rb_key(crq->request);
-// +        
-// +        if(rq->sector > cd->last_sector) {
-// +                crq->queue_id = cd->curr;
-// +                cscan_add_crq_rb(cd,crq); 
-// +        } else {
-// +                crq->queue_id = 1 - cd->curr;
-// +                cscan_add_crq_rb(cd,crq); 
-// +        }
-// +
-// +        if(rq_mergeable(rq)) {
-// +                cscan_add_crq_hash(cd,crq);
-// +
-// +                if(!q->last_merge)
-// +                        q->last_merge = rq;    
-// +        }                
+	struct cscan_rq *crq = (struct cscan_request*)rq->elevator_private;
+	if (rq->sector > crq->last_sector) {
+		crq->queue_id = cd->curr;
+		cscan_add_crq_rb(cd, crq); 
+	}
+	else {
+		crq->queue_id = 1 - cd->curr;
+		cscan_add_crq_rb(cd,crq); 
+	}
+	if(rq_mergeable(rq)) {
+		if(!q->last_merge)
+			q->last_merge = rq;    
+	}                
 }
 
 // int elevator_merge_fn(struct request_queue *queue, struct request **req, struct bio *bio);
@@ -334,18 +279,11 @@ static int cscan_merge(request_queue_t *q, struct request **req, struct bio *bio
 void cscan_merged_requests(struct request_queue_t *q, struct request *req1, struct request *req2)
 {
 	// TODO 这里应该删掉req2，并且重新调整req1
-// +        struct CSCAN_data * cd      = q->elevator->elevator_data;
-// +        struct CSCAN_request *crq   = 
-// +                        (struct CSCAN_request*)req->elevator_private;
-// +        struct CSCAN_request *tnext = 
-// +                        (struct CSCAN_request*)req->elevator_private;
-// +
-// +
-// +        BUG_ON(!crq);
-// +        BUG_ON(!tnext);
-// +        
-// +        cscan_del_crq_hash(crq);
-// +        cscan_add_crq_hash(cd,crq);
+	struct cscan_data *cd = q->elevator->elevator_data;
+	struct cscan_request *crq = (struct cscan_request *)req->elevator_private;
+	struct cscan_request *tnext = (struct cscan_request *)req->elevator_private;
+	BUG_ON(!crq);
+	BUG_ON(!tnext);
 // +        
 // +        if(rq_rb_key(req) |= crq->rb_key) {
 // +                cscan_del_crq_rb(cd,crq);
@@ -359,15 +297,16 @@ static struct request *cscan_next_request(request_queue_t *q)
 {
 	struct cscan_data *cd = q->elevator->elevator_data;
 	struct request *rq = NULL;        
-// +
-// +	if (!list_empty(cd->dispatch)) {
-// +dispatch:       rq = list_entry_rq(cd->dispatch->next);
-// +                cd->last_sector = rq->sector + rq->nr_sectors;
-// +                return rq;
-// +        }                
-// +        if(cscan_dispatch_requests(cd)) {
-// +                goto dispatch;
-// +        }
+
+	if (!list_empty(cd->dispatch)) {
+dispatch:
+		rq = list_entry_rq(cd->dispatch->next);
+		cd->last_sector = rq->sector + rq->nr_sectors;
+		return rq;
+	}                
+	if(cscan_dispatch_requests(cd)) {
+		goto dispatch;
+	}
 	return NULL;
 }
 
@@ -390,21 +329,29 @@ static void cscan_insert_request(request_queue_t *q, struct request *rq, int whe
 
 	switch (where) {
 	case ELEVATOR_INSERT_BACK:
-// +                        while (cscan_dispatch_requests(cd))
-// +                                ;
-// +                        list_add_tail(&rq->queuelist, cd->dispatch);
-// +                        break;
+		while (cscan_dispatch_requests(cd))
+			;
+		list_add_tail(&rq->queuelist, cd->dispatch);
+		break;
 	case ELEVATOR_INSERT_FRONT:
-// +                        list_add(&rq->queuelist, cd->dispatch);
-// +                        break;
+		list_add(&rq->queuelist, cd->dispatch);
+		break;
 	case ELEVATOR_INSERT_SORT:
 		BUG_ON(!blk_fs_request(rq));
-// +                        cscan_add_request(q, rq);
+		cscan_add_request(q, rq);
 		break;
 	default:
 		printk("%s: bad insert point %d\n", __FUNCTION__,where);
 		return;
 	}            
+}
+
+static int cscan_queue_empty(request_queue_t *q)
+{
+	struct cscan_data *cd = q->elevator->elevator_data;
+	if (!list_empty(&cd->sort_list[0]) || !list_empty(&cd->sort_list[1]) || !list_empty(cd->dispatch))
+		return 0;
+	return 1;
 }
 
 // int elevator_set_req_fn(struct request_queue *queue, struct request *req, gfp_t gfp);
@@ -436,9 +383,6 @@ static int cscan_set_request(request_queue_t *q, struct request *rq, int gfp_mas
 	crq = mempool_alloc(cd->crq_pool, gfp_mask);
 	if(crq) {
 		memset(crq, 0, sizeof(*crq));
-		// RB_CLEAR(&crq->rb_node);             
-		//INIT_LIST_HEAD(&crq->hash);
-		//crq->on_hash = 0;
 		crq->request = rq;
 		rq->elevator_private = crq;
 		return 0;
@@ -472,7 +416,6 @@ static void cscan_exit_queue(elevator_t * e)
 {
 	struct cscan_data *cd = e->elevator_data;
 	mempool_destroy(cd->crq_pool);
-// +        kfree(cd->hash);
 	kfree(cd);
 }
 
@@ -491,20 +434,8 @@ static int cscan_init_queue(request_queue_t *q, elevator_t *e)
 	if (!cd)
 		return -ENOMEM;
 	memset(cd, 0, sizeof(*cd));
-// +       int i;
-// +       cd->count[0] = 0;
-// +       cd->count[1] = 0;
-// +      
-// +       cd->hash = kmalloc(sizeof(struct list_head)*DL_HASH_ENTRIES,GFP_KERNEL);
-// +
-// +       if(!cd->hash) {
-// +                kfree(cd);
-// +                return -ENOMEM;
-// +       }
-// +
-// +       for(i = 0;i< DL_HASH_ENTRIES; i++)
-// +                INIT_LIST_HEAD(&cd->hash[i]);
-// +      
+	cd->count[0] = 0;
+	cd->count[1] = 0;    
 	// mempool_t *mempool_create(int min_nr,
 	//                            mempool_alloc_t *alloc_fn,
 	//                            mempool_free_t *free_fn,
@@ -523,13 +454,12 @@ static int cscan_init_queue(request_queue_t *q, elevator_t *e)
 	// pool = mempool_create(MY_POOL_MINIMUM,mempool_alloc_slab, mempool_free_slab, cache);  
 	cd->crq_pool = mempool_create(BLKDEV_MIN_RQ, mempool_alloc_slab, mempool_free_slab,crq_pool);
 	if(!cd->crq_pool) {
-		// kfree(cd->hash);
 		kfree(cd);
 		return -ENOMEM;
 	}
-// +
-// +       cd->dispatch = &q->queue_head;
-// +       cd->curr = 0;    
+
+	cd->dispatch = &q->queue_head;
+	cd->curr = 0;    
 	INIT_LIST_HEAD(&dd->sort_list[0]);
 	INIT_LIST_HEAD(&dd->sort_list[1]);
 	e->elevator_data = cd;
@@ -544,6 +474,7 @@ static struct elevator_type cscan = {
 		.elevator_add_req_fn = cscan_insert_request,
 		.elevator_set_req_fn = cscan_set_request,
 		.elevator_put_req_fn = cscan_put_request,
+		.elevator_queue_empty_fn =	cscan_queue_empty,
 		.elevator_init_fn = cscan_init_queue,
 		.elevator_exit_fn = cscan_exit_queue,
 	},
