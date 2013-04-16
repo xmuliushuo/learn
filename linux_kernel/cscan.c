@@ -10,20 +10,22 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/compiler.h>
+#include <linux/rbtree.h>
 
-struct cscan_rq {
+struct cscan_request {
 	struct request* request;   
 	unsigned char queue_id; /* Which queue is this request on */
-	struct list_head list;
+	struct rb_node rb_node;
+	sector_t rb_key;
 };
 
 struct cscan_data {
-	struct list_head sort_list[2];
+	struct rb_root sort_list[2];
+	sector_t last_sector;	
 	unsigned int curr;
 	unsigned int count[2];
-	struct list_head * dispatch;    
 	mempool_t *crq_pool;
-	sector_t last_sector;
+	
 };
 
 static kmem_cache_t* crq_pool;
@@ -43,22 +45,13 @@ void cscan_add_crq(struct cscan_data *cd, struct cscan_request *crq)
 	cd->count[crq->queue_id]++;
 }
 
-// 把crq对应的request添加到调度队列，并且删除之
-static void cscan_remove_request(struct cscan_data *cd, 
-	struct cscan_request *crq, int queue) {
-	struct request * rq;
-	rq = crq->request;
-	list_add_tail(&rq->queuelist, cd->dispatch);
-	cscan_del_crq(cd, crq);
-}
-
 static int 
 cscan_move_requests_to_dispatch_queue(struct cscan_data *cd, int queue) {
 	struct cscan_request *crq;
 	int ret = 0;
 	while (!list_empty(&cd->sort_list[queue])) {
 		crq = list_entry(cd->sort_list[queue].next, 
-			struct cscan_rq, list);
+			struct cscan_request, list);
 		cscan_remove_request(cd, crq, queue);
 		ret = 1;
 	}
@@ -75,21 +68,47 @@ static int cscan_dispatch_requests(struct cscab_data *cd) {
 	return (ret1 || ret2);      
 }
 
-static void cscan_add_request(struct request_queue *q, struct request *rq) {
-	struct cscan_data *cd = q->elevator->elevator_data;
-	struct cscan_rq *crq = (struct cscan_request*)rq->elevator_private;
-	if (rq->sector > crq->last_sector) {
-		crq->queue_id = cd->curr;
-		cscan_add_crq(cd, crq); 
+// -------------------------------------------------------------------------------
+
+static inline struct cscan_request* 
+rb_insert_cscan_request(struct rb_root *root,	struct cscan_request *crq)
+{
+	struct rb_node **p = &root->rb_node;
+	struct rb_node *parent = NULL;
+	struct cscan_request * __crq;
+
+	while (*p) {
+		parent = *p;
+		__crq = rb_entry(parent, struct cscan_request, rb_node);
+		if (crq->rb_key < __crq->rb_key)
+			p = &(*p)->rb_left;
+		else if (crq->rb_key > __crq->rb_key)
+			p = &(*p)->rb_right;
+		else
+			// TODO
+			return __crq;
 	}
-	else {
-		crq->queue_id = 1 - cd->curr;
-		cscan_add_crq(cd, crq); 
+	rb_link_node(&crq->rb_node, parent, p);
+	return NULL;
+}
+
+static inline struct
+cscan_request * rb_find_cscan_request(struct rb_root * root, long key) 
+{
+	struct rb_node * n = root->rb_node;
+	struct cscan_request * crq;
+
+	while(n) {
+		crq = rb_entry(n,struct cscan_request,rb_node);
+		if (key > crq->rb_key) {
+			n = n->rb_right;
+		} else if (key < crq->rb_key) {
+			n = n->rb_left;
+		} else {
+			return crq;
+		}
 	}
-	if(rq_mergeable(rq)) {
-		if(!q->last_merge)
-			q->last_merge = rq;    
-	}                
+	return NULL;
 }
 
 // int elevator_merge_fn(struct request_queue *queue, struct request **req, struct bio *bio);
@@ -106,40 +125,65 @@ static void cscan_add_request(struct request_queue *q, struct request *rq) {
 // Arguments
 // req: The existing request chosen to merge bio into.
 // bio: The bio that will be merged into the existing request.
-static int 
-cscan_merge(request_queue_t *q, struct request **req, struct bio *bio)
+// static int 
+// cscan_merge(request_queue_t *q, struct request **req, struct bio *bio)
+// {
+// 	int ret;
+// 	struct list_head *entry;
+// 	struct request *__rq;
+// 	struct cscan_data *cd = q->elevator->elevator_data;
+// 	/*
+// 	 * try last_merge to avoid going to hash
+// 	 */
+// 	ret = elv_try_last_merge(q, bio);
+// 	if (ret != ELEVATOR_NO_MERGE) {
+// 		*req = q->last_merge;
+// 		return ret;
+// 	}
+// 	entry = &cd->sort_list[curr];
+// 	while ((entry = entry->prev) != &cd->sort_list[curr]) {
+// 		__rq = list_entry(entry, struct cscan_request, list);
+// 		if ((ret = elv_try_merge(__rq, bio))) {
+// 			*req = __rq;
+// 			q->last_merge = __rq;
+// 			return ret;
+// 		}
+// 	}
+// 	entry = &cd->sort_list[1 - curr];
+// 	while ((entry = entry->prev) != &cd->sort_list[1 - curr]) {
+// 		__rq = list_entry(entry, struct cscan_request, list);
+// 		if ((ret = elv_try_merge(__rq, bio))) {
+// 			*req = __rq;
+// 			q->last_merge = __rq;
+// 			return ret;
+// 		}
+// 	}
+// 	return ELEVATOR_NO_MERGE;
+// }
+
+static struct int cscan_dispatch_requests(struct request_queue *q, int force)
 {
-	int ret;
-	struct list_head *entry;
-	struct request *__rq;
 	struct cscan_data *cd = q->elevator->elevator_data;
-	/*
-	 * try last_merge to avoid going to hash
-	 */
-	ret = elv_try_last_merge(q, bio);
-	if (ret != ELEVATOR_NO_MERGE) {
-		*req = q->last_merge;
-		return ret;
+	struct rb_root *root = NULL;
+	struct cscan_request *crq = NULL;
+	struct request *rq = NULL;
+	if (rb_first(&cd->sort_list[cd->curr])) {
+		root = &cd->sort_list[cd->first]; 
 	}
-	entry = &cd->sort_list[curr];
-	while ((entry = entry->prev) != &cd->sort_list[curr]) {
-		__rq = list_entry(entry, struct cscan_rq, list);
-		if ((ret = elv_try_merge(__rq, bio))) {
-			*req = __rq;
-			q->last_merge = __rq;
-			return ret;
-		}
+	else if (rb_first(&cd->sort_list[1 - cd->curr])) {
+		root = &cd->sort_list[1 - cd->first]; 
+		cd->curr = 1 - cd->curr; 
 	}
-	entry = &cd->sort_list[1 - curr];
-	while ((entry = entry->prev) != &cd->sort_list[1 - curr]) {
-		__rq = list_entry(entry, struct cscan_rq, list);
-		if ((ret = elv_try_merge(__rq, bio))) {
-			*req = __rq;
-			q->last_merge = __rq;
-			return ret;
-		}
+	if (root) {
+		crq = rb_entry(rb_first(root), struct cscan_request, rb_node);
+		rq = crq->request;
+		rb_erase(&crq->rb_node, &cd->sort_list[crq->queue_id]);
+		crq->rb_node.rb_color = RB_NONE;
+		cd->count[crq->queue_id]--;
+		elv_dispatch_sort(q, rq);
+		return 1;
 	}
-	return ELEVATOR_NO_MERGE;
+	return 0;
 }
 
 // void elevator_merge_req_fn(struct request_queue *queue, struct request *req1, 
@@ -154,79 +198,51 @@ cscan_merge(request_queue_t *q, struct request **req, struct bio *bio)
 void cscan_merged_requests(struct request_queue_t *q, 
 	struct request *req1, struct request *req2)
 {
-	// TODO 这里应该删掉req2，并且重新调整req1
 	struct cscan_data *cd = q->elevator->elevator_data;
-	struct cscan_request *crq = (struct cscan_request *)req->elevator_private;
-	struct cscan_request *tnext = 
-		(struct cscan_request *)req->elevator_private;
+	struct cscan_request *crq = (struct cscan_request *)req2->elevator_private;
 	BUG_ON(!crq);
-	BUG_ON(!tnext);
-	cscan_remove_request(cd, tnext, tnext->queue_id);
+	rb_erase(&crq->rb_node, &cd->sort_list[crq->queue_id]);
+	crq->rb_node.rb_color = RB_NONE;
+	cd->count[crq->queue_id]--;
 }
 
-static struct request *cscan_next_request(request_queue_t *q)
+static void
+cscan_add_crq_rb(struct cscan_data * cd, struct cscan_request * crq) 
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
-	struct request *rq = NULL;        
-
-	if (!list_empty(cd->dispatch)) {
-dispatch:
-		rq = list_entry_rq(cd->dispatch->next);
-		cd->last_sector = rq->sector + rq->nr_sectors;
-		return rq;
-	}                
-	if(cscan_dispatch_requests(cd)) {
-		goto dispatch;
-	}
-	return NULL;
+	crq->rb_key = crq->request->sector;
+	rb_insert_cscan_request(&cd->sort_list[crq->queue_id], crq);
+	rb_insert_color(&crq->rb_node, &cd->sort_list[crq->queue_id]);
+	cd->count[crq->queue_id]++;
 }
 
-// void elevator_add_req_fn(struct request_queue *queue,
-// 		struct request *req, int where);
+// void elevator_add_req_fn(struct request_queue *queue, struct request *req);
 // Description
 // Queues a new request with the scheduler.
 // This function is mandatory.
 // Arguments
-// req
-// The request to be enqueued.
-static void 
-cscan_insert_request(request_queue_t *q, struct request *rq, int where)
-{
-	struct CSCAN_data *cd = q->elevator->elevator_data;
+// req: The request to be enqueued.
+static void cscan_add_request(struct request_queue *q, struct request *rq) {
+	struct cscan_data *cd = q->elevator->elevator_data;
+	struct cscan_request *crq = (struct cscan_request*)rq->elevator_private;
 
-	// 使用likely ，执行if后面语句的可能性大些，编译器将if{}是的内容编译到前面, 
-	// 使用unlikely ，执行else后面语句的可能性大些,编译器将else{}里的内容编译到前面。
-	// 这样有利于cpu预取,提高预取指令的正确率,因而可提高效率。
-	if (unlikely(rq->flags & (REQ_SOFTBARRIER | REQ_HARDBARRIER) 
-		&& where == ELEVATOR_INSERT_SORT))
-		where = ELEVATOR_INSERT_BACK;
-
-	switch (where) {
-	case ELEVATOR_INSERT_BACK:
-		while (cscan_dispatch_requests(cd))
-			;
-		list_add_tail(&rq->queuelist, cd->dispatch);
-		break;
-	case ELEVATOR_INSERT_FRONT:
-		list_add(&rq->queuelist, cd->dispatch);
-		break;
-	case ELEVATOR_INSERT_SORT:
-		BUG_ON(!blk_fs_request(rq));
-		cscan_add_request(q, rq);
-		break;
-	default:
-		printk("%s: bad insert point %d\n", __FUNCTION__,where);
-		return;
-	}            
+	if (rq->sector > crq->last_sector) {
+		crq->queue_id = cd->curr;
+	}
+	else {
+		crq->queue_id = 1 - cd->curr;
+	}
+	cscan_add_crq_rb(cd, crq);
+	if(rq_mergeable(rq)) {
+		if(!q->last_merge)
+			q->last_merge = rq;
+	}
 }
 
 static int cscan_queue_empty(request_queue_t *q)
 {
 	struct cscan_data *cd = q->elevator->elevator_data;
-	if (!list_empty(&cd->sort_list[0]) || !list_empty(&cd->sort_list[1]) 
-		|| !list_empty(cd->dispatch))
-		return 0;
-	return 1;
+	return ((rb_first(&cd->sort_list[cd->first]) == NULL) && 
+		(rb_first(&cd->sort_list[1 - cd->first]) == NULL));
 }
 
 // int elevator_set_req_fn(struct request_queue *queue,
@@ -264,7 +280,7 @@ cscan_set_request(request_queue_t *q, struct request *rq, int gfp_mask)
 	if(crq) {
 		memset(crq, 0, sizeof(*crq));
 		crq->request = rq;
-		INIT_LIST_HEAD(&crq->list);
+		crq->rb_node.rb_color = RB_NONE;
 		rq->elevator_private = crq;
 		return 0;
 	}
@@ -286,7 +302,6 @@ static void cscan_put_request(request_queue_t *q, struct request *rq)
 		rq->elevator_private = NULL;
 	}
 }
-
 // void elevator_exit_fn(elevator_t *elv);
 // Description
 // Free any resources allocated in elevator_init_fn.
@@ -297,9 +312,8 @@ static void cscan_put_request(request_queue_t *q, struct request *rq)
 static void cscan_exit_queue(elevator_t * e) 
 {
 	struct cscan_data *cd = e->elevator_data;
-	BUG_ON(!list_empty(&cd->sort_list[0]));
-	BUG_ON(!list_empty(&cd->sort_list[0]));
-	mempool_destroy(cd->crq_pool);
+	BUG_ON(rb_first(&cd->sort_list[cd->curr]) != NULL);
+	BUG_ON(rb_first(&cd->sort_list[1 - cd->curr]) != NULL);
 	kfree(cd);
 }
 
@@ -313,15 +327,17 @@ static void cscan_exit_queue(elevator_t * e)
 // Arguments
 // queue
 // The queue this I/O scheduler will be attached to.
-static int cscan_init_queue(request_queue_t *q, elevator_t *e) 
+static void *cscan_init_queue(request_queue_t *q, elevator_t *e) 
 {
 	struct cscan_data * cd;
 	cd = kmalloc(sizeof(*cd), GFP_KERNEL);
 	if (!cd)
-		return -ENOMEM;
-	memset(cd, 0, sizeof(*cd));
+		return NULL;
+	// TODO
 	cd->count[0] = 0;
-	cd->count[1] = 0;    
+	cd->count[1] = 0;
+	cd->sort_list[0] = RB_ROOT;
+	cd->sort_list[1] = RB_ROOT;
 	// mempool_t *mempool_create(int min_nr,
 	//                            mempool_alloc_t *alloc_fn,
 	//                            mempool_free_t *free_fn,
@@ -346,25 +362,24 @@ static int cscan_init_queue(request_queue_t *q, elevator_t *e)
 		kfree(cd);
 		return -ENOMEM;
 	}
-
-	cd->dispatch = &q->queue_head;
 	cd->curr = 0;
 	cd->last_sector = 0;
-	INIT_LIST_HEAD(&dd->sort_list[0]);
-	INIT_LIST_HEAD(&dd->sort_list[1]);
 	e->elevator_data = cd;
 	return 0;
 }
 
 static struct elevator_type cscan = {
 	.ops = {
-		.elevator_merge_fn = cscan_merge,
+		// .elevator_merge_fn = cscan_merge,
 		.elevator_merge_req_fn = cscan_merged_requests,
-		.elevator_next_req_fn = cscan_next_request,
-		.elevator_add_req_fn = cscan_insert_request,
+		// .elevator_merged_fn = cscan_merged_request,
+		.elevator_add_req_fn = cscan_add_request,
+		.elevator_queue_empty_fn =	cscan_queue_empty,
+		.elevator_dispatch_fn =	cscan_dispatch_requests,
+		// .elevator_former_req_fn = cscan_former_request,
+		// .elevator_latter_req_fn = cscan_latter_request,
 		.elevator_set_req_fn = cscan_set_request,
 		.elevator_put_req_fn = cscan_put_request,
-		.elevator_queue_empty_fn =	cscan_queue_empty,
 		.elevator_init_fn = cscan_init_queue,
 		.elevator_exit_fn = cscan_exit_queue,
 	},
