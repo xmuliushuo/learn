@@ -5,12 +5,19 @@
 // 不停地完成当前队列的请求直到队列为空，然后互换两个队列的角色。
 // 刘硕
 
-#include <linux/bio.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/blkdev.h>
 #include <linux/elevator.h>
+#include <linux/bio.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/init.h>
 #include <linux/compiler.h>
 #include <linux/rbtree.h>
+
+
+#define RB_NONE (2)
 
 struct cscan_request {
 	struct request* request;   
@@ -24,51 +31,10 @@ struct cscan_data {
 	sector_t last_sector;	
 	unsigned int curr;
 	unsigned int count[2];
-	mempool_t *crq_pool;
-	
 };
 
-static kmem_cache_t* crq_pool;
-
-static inline 
-void cscan_del_crq(struct cscan_data *cd, struct cscan_request *crq)
-{
-	list_del_init(&crq->sort_list[crq->queue_id]);
-	cd->count[crq->queue_id]--;
-}
-
-static inline 
-void cscan_add_crq(struct cscan_data *cd, struct cscan_request *crq)
-{
-// +        rb_insert_request(&cd->sort_list[crq->queue_id],crq);
-	// TODO 把请求插入到队列中
-	cd->count[crq->queue_id]++;
-}
-
-static int 
-cscan_move_requests_to_dispatch_queue(struct cscan_data *cd, int queue) {
-	struct cscan_request *crq;
-	int ret = 0;
-	while (!list_empty(&cd->sort_list[queue])) {
-		crq = list_entry(cd->sort_list[queue].next, 
-			struct cscan_request, list);
-		cscan_remove_request(cd, crq, queue);
-		ret = 1;
-	}
-	return ret;
-}
-
-// 把调度器队列中的请求分发到块设备的请求队列。
-static int cscan_dispatch_requests(struct cscab_data *cd) {
-	int ret1,ret2;
-	ret1 = cscan_move_requests_to_dispatch_queue(cd,cd->curr);
-	ret2 = cscan_move_requests_to_dispatch_queue(cd,1 - cd->curr);   
-	cd->curr = 1 - cd->curr;
-	// Return 1 if you have dispatched requests
-	return (ret1 || ret2);      
-}
-
-// -------------------------------------------------------------------------------
+static struct kmem_cache * __crq_pool;
+static mempool_t *crq_pool;
 
 static inline struct cscan_request* 
 rb_insert_cscan_request(struct rb_root *root,	struct cscan_request *crq)
@@ -84,9 +50,10 @@ rb_insert_cscan_request(struct rb_root *root,	struct cscan_request *crq)
 			p = &(*p)->rb_left;
 		else if (crq->rb_key > __crq->rb_key)
 			p = &(*p)->rb_right;
-		else
-			// TODO
+		else {
+			printk(KERN_ALERT "maybe a bug here");
 			return __crq;
+		}
 	}
 	rb_link_node(&crq->rb_node, parent, p);
 	return NULL;
@@ -161,24 +128,36 @@ cscan_request * rb_find_cscan_request(struct rb_root * root, long key)
 // 	return ELEVATOR_NO_MERGE;
 // }
 
-static struct int cscan_dispatch_requests(struct request_queue *q, int force)
+// int elevator_dispatch_fn(struct request_queue *queue, int force);
+// Description
+// Requests the scheduler to populate the dispatch queue with requests. 
+// Once requests have been dispatched, the scheduler may not manipulate them.
+// Returns the number of requests dispatched.
+// This function is mandatory.
+// Arguments
+// force
+// If non-zero, requests must be dispatched, regardless of scheduling policy.
+// This is used, for instance, to drain requests before switching schedulers. 
+// If 0, as in normal operation, requests may be postponed.
+static int cscan_dispatch_requests(struct request_queue *q, int force)
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
+	struct cscan_data *cd = (struct cscan_data *)q->elevator->elevator_data;
 	struct rb_root *root = NULL;
 	struct cscan_request *crq = NULL;
 	struct request *rq = NULL;
 	if (rb_first(&cd->sort_list[cd->curr])) {
-		root = &cd->sort_list[cd->first]; 
+		root = &cd->sort_list[cd->curr]; 
 	}
 	else if (rb_first(&cd->sort_list[1 - cd->curr])) {
-		root = &cd->sort_list[1 - cd->first]; 
+		root = &cd->sort_list[1 - cd->curr]; 
 		cd->curr = 1 - cd->curr; 
 	}
 	if (root) {
 		crq = rb_entry(rb_first(root), struct cscan_request, rb_node);
 		rq = crq->request;
 		rb_erase(&crq->rb_node, &cd->sort_list[crq->queue_id]);
-		crq->rb_node.rb_color = RB_NONE;
+		// crq->rb_node.rb_color = RB_NONE;
+		cd->last_sector = rq->sector + rq->nr_sectors;
 		cd->count[crq->queue_id]--;
 		elv_dispatch_sort(q, rq);
 		return 1;
@@ -195,14 +174,14 @@ static struct int cscan_dispatch_requests(struct request_queue *q, int force)
 // Arguments
 // req1: This request will grow to accommodate req2.
 // req2: This request is coalsced with req1 and will be deallocated.
-void cscan_merged_requests(struct request_queue_t *q, 
+void cscan_merged_requests(struct request_queue *q, 
 	struct request *req1, struct request *req2)
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
+	struct cscan_data *cd = (struct cscan_data *)q->elevator->elevator_data;
 	struct cscan_request *crq = (struct cscan_request *)req2->elevator_private;
 	BUG_ON(!crq);
 	rb_erase(&crq->rb_node, &cd->sort_list[crq->queue_id]);
-	crq->rb_node.rb_color = RB_NONE;
+	// crq->rb_node.rb_color = RB_NONE;
 	cd->count[crq->queue_id]--;
 }
 
@@ -222,10 +201,10 @@ cscan_add_crq_rb(struct cscan_data * cd, struct cscan_request * crq)
 // Arguments
 // req: The request to be enqueued.
 static void cscan_add_request(struct request_queue *q, struct request *rq) {
-	struct cscan_data *cd = q->elevator->elevator_data;
+	struct cscan_data *cd = (struct cscan_data *)q->elevator->elevator_data;
 	struct cscan_request *crq = (struct cscan_request*)rq->elevator_private;
 
-	if (rq->sector > crq->last_sector) {
+	if (rq->sector > cd->last_sector) {
 		crq->queue_id = cd->curr;
 	}
 	else {
@@ -238,11 +217,11 @@ static void cscan_add_request(struct request_queue *q, struct request *rq) {
 	}
 }
 
-static int cscan_queue_empty(request_queue_t *q)
+static int cscan_queue_empty(struct request_queue *q)
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
-	return ((rb_first(&cd->sort_list[cd->first]) == NULL) && 
-		(rb_first(&cd->sort_list[1 - cd->first]) == NULL));
+	struct cscan_data *cd = (struct cscan_data *)q->elevator->elevator_data;
+	return ((rb_first(&cd->sort_list[cd->curr]) == NULL) && 
+		(rb_first(&cd->sort_list[1 - cd->curr]) == NULL));
 }
 
 // int elevator_set_req_fn(struct request_queue *queue,
@@ -257,9 +236,8 @@ static int cscan_queue_empty(request_queue_t *q)
 // gfp
 // Modifier required for any allocations performed.
 static int 
-cscan_set_request(request_queue_t *q, struct request *rq, int gfp_mask) 
+cscan_set_request(struct request_queue *q, struct request *rq, gfp_t gfp_mask) 
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
 	struct cscan_request *crq;
 
 	// void *mempool_alloc(mempool_t *pool, int gfp_mask);
@@ -276,11 +254,12 @@ cscan_set_request(request_queue_t *q, struct request *rq, int gfp_mask)
 	// 区修饰符表示从哪个区分配内存，内核优先从ZONE_NORMAL开始分配。区修饰符的值只有__GFP_DMA，__GFP_HIGHMEM。
 	// 类型修饰符指定所需的行为和区描述符以完成特殊类型的处理。
 	// 最常用的值为__GFP_KERNEL （__GFP_WAIT | __GFP_IO | __GFP_FS）
-	crq = mempool_alloc(cd->crq_pool, gfp_mask);
+	crq = mempool_alloc(crq_pool, gfp_mask);
 	if(crq) {
 		memset(crq, 0, sizeof(*crq));
 		crq->request = rq;
-		crq->rb_node.rb_color = RB_NONE;
+		// TODO RB_CLEARNODE
+		// crq->rb_node.rb_color = RB_NONE;
 		rq->elevator_private = crq;
 		return 0;
 	}
@@ -293,12 +272,11 @@ cscan_set_request(request_queue_t *q, struct request *rq, int gfp_mask)
 // Arguments
 // req
 // The request owning the private data to be freed.
-static void cscan_put_request(request_queue_t *q, struct request *rq) 
+static void cscan_put_request(struct request *rq) 
 {
-	struct cscan_data *cd = q->elevator->elevator_data;
 	struct cscan_request *crq = (struct cscan_request*)rq->elevator_private;
 	if(crq) {
-		mempool_free(crq, cd->crq_pool);
+		mempool_free(crq, crq_pool);
 		rq->elevator_private = NULL;
 	}
 }
@@ -311,13 +289,13 @@ static void cscan_put_request(request_queue_t *q, struct request *rq)
 // The elevator instance to be freed.
 static void cscan_exit_queue(elevator_t * e) 
 {
-	struct cscan_data *cd = e->elevator_data;
+	struct cscan_data *cd = (struct cscan_data *)e->elevator_data;
 	BUG_ON(rb_first(&cd->sort_list[cd->curr]) != NULL);
 	BUG_ON(rb_first(&cd->sort_list[1 - cd->curr]) != NULL);
 	kfree(cd);
 }
 
-// int elevator_init_fn(request_queue_t *q, elevator_t *e);
+// void *elevator_init_fn(struct request_queue *queue);
 // Description
 // Initialise a new I/O scheduler instance. In particular,
 // allocate and initialise any private data.
@@ -327,45 +305,19 @@ static void cscan_exit_queue(elevator_t * e)
 // Arguments
 // queue
 // The queue this I/O scheduler will be attached to.
-static void *cscan_init_queue(request_queue_t *q, elevator_t *e) 
+static void *cscan_init_queue(struct request_queue *q) 
 {
 	struct cscan_data * cd;
 	cd = kmalloc(sizeof(*cd), GFP_KERNEL);
 	if (!cd)
 		return NULL;
-	// TODO
 	cd->count[0] = 0;
 	cd->count[1] = 0;
 	cd->sort_list[0] = RB_ROOT;
 	cd->sort_list[1] = RB_ROOT;
-	// mempool_t *mempool_create(int min_nr,
-	//                            mempool_alloc_t *alloc_fn,
-	//                            mempool_free_t *free_fn,
-	//                            void *pool_data);
-	// min_nr 参数是内存池应当一直保留的最小数量的分配对象*/
-	//
-	// 实际的分配和释放对象由 alloc_fn 和 free_fn 处理,原型:
-	// typedef void *(mempool_alloc_t)(int gfp_mask, void *pool_data);
-	// typedef void (mempool_free_t)(void *element, void *pool_data);
-	// 给 mempool_create 最后的参数 *pool_data 被传递给 alloc_fn 和 free_fn
-	//
-	// 你可编写特殊用途的函数来处理 mempool 的内存分配,但通常只需使用 slab 分配器为你处理这个任务：
-	// mempool_alloc_slab 和 mempool_free_slab的原型和上述内存池分配原型匹配，
-	// 并使用 kmem_cache_alloc 和 kmem_cache_free 处理内存的分配和释放。
-	//
-	// 典型的设置内存池的代码如下:
-	// cache = kmem_cache_create(. . .);
-	// pool = mempool_create(MY_POOL_MINIMUM,mempool_alloc_slab, mempool_free_slab, cache);  
-	cd->crq_pool = mempool_create(BLKDEV_MIN_RQ, mempool_alloc_slab, 
-		mempool_free_slab,crq_pool);
-	if(!cd->crq_pool) {
-		kfree(cd);
-		return -ENOMEM;
-	}
 	cd->curr = 0;
 	cd->last_sector = 0;
-	e->elevator_data = cd;
-	return 0;
+	return cd;
 }
 
 static struct elevator_type cscan = {
@@ -387,50 +339,22 @@ static struct elevator_type cscan = {
 	.elevator_owner = THIS_MODULE,
 };
 
-int cscan_init(void)
+static int __init cscan_init(void)
 {
 	int ret;
-	// kmem_cache_create - 创建一个 cache.
-	// kmem_cache_t *
-	// kmem_cache_create (const char *name, size_t size, size_t align,
-	// unsigned long flags, void (*ctor)(void*, kmem_cache_t *, unsigned long),
-	// void (*dtor)(void*, kmem_cache_t *, unsigned long))
-	// 
-	// @name: 此cache在/proc/slabinfo中显示的名字
-	// @size: 此cache中对象的大小
-	// @align: 对象对齐方式
-	// @flags: SLAB 标志
-	// @ctor: 对象构造函数.
-	// @dtor: 对象析构函数.
-	//
-	// 成功返回cache的指针，失败返回NULL.
-	// 此函数不能在中断中调用，但能被中断.
-	// @ctor 将在cache建立新页面时候调用
-	// @dtor 将在页面被回收时候调用.
-	// @name must be valid until the cache is destroyed. This implies that
-	// the module calling this has to destroy the cache before getting unloaded.
-	// 
-	// The flags are
-	// %SLAB_POISON - Poison the slab with a known test pattern (a5a5a5a5)
-	// to catch references to uninitialised memory.
-	// %SLAB_RED_ZONE - Insert `Red' zones around the allocated memory to check
-	// for buffer overruns.
-	// %SLAB_HWCACHE_ALIGN - 硬件对齐Align the objects in this cache to a hardware
-	// cacheline.  This can be beneficial if you're counting cycles as closely
-	// as davem.
-	crq_pool = kmem_cache_create("cscan_crq", sizeof(struct cscan_crq), 
-		0, 0, NULL, NULL);
+	__crq_pool = kmem_cache_create("cscan_crq", sizeof(struct cscan_request), 
+		0, 0, NULL);
+	crq_pool = mempool_create(BLKDEV_MIN_RQ, mempool_alloc_slab, 
+		mempool_free_slab, __crq_pool);
 	if (!crq_pool)
 		return -ENOMEM;
-	ret = elv_register(&cscan);
-	if (ret)
-		kmem_cache_destroy(crq_pool);
-	return ret;
+	elv_register(&cscan);
+	return 0;
 }
 
-void cscan_exit(void)
+static void __exit cscan_exit(void)
 {
-	kmem_cache_destroy(crq_pool);
+	kmem_cache_destroy(__crq_pool);
 	elv_unregister(&cscan);
 }
 
