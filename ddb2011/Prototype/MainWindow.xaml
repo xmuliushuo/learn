@@ -1,0 +1,77 @@
+﻿<Window x:Class="DDB2011Prototype.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DDB2011-Prototype" Height="480" Width="720" ResizeMode="CanMinimize" 
+        Icon="/DDB2011Prototype;component/Images/PHELiO-OMNI.jpg" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <TextBox Height="32" Margin="6,0,139,32" Name="textBoxSearch" VerticalAlignment="Bottom" 
+                 Text="{Binding ElementName=slider1, Path=Value, UpdateSourceTrigger=PropertyChanged}" FontSize="15" 
+                 TextAlignment="Left" HorizontalAlignment="Stretch" />
+        <TextBlock Height="20" HorizontalAlignment="Left" Margin="6,0,0,6" Name="textBlockInfo" VerticalAlignment="Bottom" Background="#FFF9FCFC" FontSize="15" TextAlignment="Left" Width="430"></TextBlock>
+        <TextBlock Background="#FFF9FCFC" FontSize="15" Height="20" HorizontalAlignment="Right" Margin="0,0,67,6" Name="textBlockInfo2" TextAlignment="Right" VerticalAlignment="Bottom" Width="189" />
+        <TextBlock Height="17" HorizontalAlignment="Right" Margin="0,6,6,0" Name="textBlockKeywordTree" Text="Search Result" VerticalAlignment="Top" Width="245" TextAlignment="Right" FontSize="13" />
+        <TextBlock Height="15" HorizontalAlignment="Left" Margin="6,6,0,0" Name="textBlockDataGraph" Text="Global Data Graph" VerticalAlignment="Top" Width="245" FontSize="13" />
+        <Button Content="SEARCH" Height="32" HorizontalAlignment="Right" Margin="0,0,67,32" Name="buttonGO" 
+                VerticalAlignment="Bottom" Width="66" IsDefault="True" FontStretch="Normal" FontWeight="Normal" 
+                FontSize="12" FontFamily="Microsoft YaHei" Click="buttonGO_Click" >
+            <Button.Template>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border Name="border" BorderBrush="LightBlue" BorderThickness="2" CornerRadius="4" Background="White">
+                        <TextBlock Background="Transparent" Name="text" Text="SEARCH" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        </TextBlock>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" TargetName="border" Value="LightBlue" />
+                        </Trigger>
+                        <Trigger Property="IsPressed"  Value="True">
+                            <Setter Property="Background" TargetName="border" Value="DimGray" />
+                            <Setter Property="UIElement.Effect">
+                                <Setter.Value>
+                                    <DropShadowEffect BlurRadius="8" Color="DimGray" 
+                                                      Direction="0" Opacity="0.6" 
+                                                      RenderingBias="Performance" ShadowDepth="0" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+        <Button Name="buttonStartDraw" Width="50" Height="50" Canvas.Top="189" BorderThickness="2" Focusable="False" 
+                    IsTabStop="False" Padding="0" Canvas.Left="657" Click="buttonStartDraw_Click" 
+                HorizontalAlignment="Right" Margin="0,0,8,10" VerticalAlignment="Bottom" BorderBrush="LightBlue">
+            <Button.Template>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border Name="border" BorderBrush="LightBlue" BorderThickness="3" CornerRadius="4" Background="White">
+                        <Polygon x:Name="triangle" Points="0,0 28,15 0,30" Stroke="LightGray" StrokeThickness="2" 
+                                     Fill="WhiteSmoke" Canvas.Left="622" Canvas.Top="237" HorizontalAlignment="Center" 
+                                     VerticalAlignment="Center" Margin="5,2,0,0" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Fill" TargetName="triangle" Value="White" />
+                            <Setter Property="Background" TargetName="border" Value="LightBlue" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Fill" TargetName="triangle" Value="DimGray" />
+                            <Setter Property="UIElement.Effect" TargetName="border">
+                                <Setter.Value>
+                                    <DropShadowEffect BlurRadius="8" Color="DimGray" 
+                                                      Direction="0" Opacity="0.6" 
+                                                      RenderingBias="Performance" ShadowDepth="0" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
+        <ScrollViewer Height="344" HorizontalAlignment="Left" Name="scrollViewer1" VerticalAlignment="Top" Width="488" Margin="6,27,0,0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <Grid Name="canvas" Margin="0" ShowGridLines="True"></Grid>
+        </ScrollViewer>
+        <Grid Name="canvasTreeBorder" Margin="500,27,6,70" >
+        <Grid Name="canvasTree" Margin="6,6,6,6" ></Grid>
+        </Grid>
+    </Grid>
+</Window>

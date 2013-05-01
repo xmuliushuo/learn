@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?><?xml-stylesheet type='text/xsl' href='_UpgradeReport_Files/UpgradeReport.xslt'?><UpgradeLog>
+<Properties><Property Name="Solution" Value="DDB2011">
+</Property><Property Name="Solution File" Value="D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\DDB2011.sln">
+</Property><Property Name="Date" Value="2011年11月16日">
+</Property><Property Name="Time" Value="1:14:57">
+</Property></Properties><Event ErrorLevel="0" Project="DDB" Source="DDB\DDB.csproj" Description="Project file successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\DDB.csproj">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\DBManager.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\DBManager.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Dijkstra.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Dijkstra.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\GraphManager.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\GraphManager.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\MainForm.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\MainForm.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\MainForm.Designer.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\MainForm.Designer.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Program.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Program.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Properties\AssemblyInfo.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Properties\AssemblyInfo.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Properties\Resources.Designer.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Properties\Resources.Designer.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Properties\Settings.Designer.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Properties\Settings.Designer.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\SteinerTree.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\SteinerTree.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Util.cs" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Util.cs">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Properties\Settings.settings" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Properties\Settings.settings">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\MainForm.resx" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\MainForm.resx">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\Properties\Resources.resx" Description="File successfully backed up as D:\SERAPHiM\Documents\SERAPHiM's Personal\C.O.U.R.S.E.S\分佈式數據庫\DDB2011\Backup\Properties\Resources.resx">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\DDB.csproj" Description="Project converted successfully">
+</Event><Event ErrorLevel="3" Project="DDB" Source="DDB\DDB.csproj" Description="Converted">
+</Event><Event ErrorLevel="0" Project="DDB" Source="DDB\DDB.csproj" Description="Scan complete: Upgrade not required for project files.">
+</Event></UpgradeLog>
