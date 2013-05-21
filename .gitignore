@@ -5,4 +5,5 @@ SCC.txt
 algorithms/homework5/dijkstraData.txt
 algorithms/homework6/HashInt.txt
 algorithms/homework6/Median.txt
-
+*.swp
+*.d

@@ -1,4 +1,4 @@
-obj-m += cscan.o
+obj-m += simple.o
 
 CURRENT_PATH := $(shell pwd)
 LINUX_KERNEL := $(shell uname -r)
