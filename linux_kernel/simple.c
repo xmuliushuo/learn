@@ -94,7 +94,7 @@ simple_merged_requests(struct request_queue *q, struct request *req,
 	/*
 	 * kill knowledge of next, this one is a goner
 	 */
-	simple_del_rq_rb(&q->elevator->elevator_data->sort_list, next);
+	simple_del_rq_rb(q->elevator->elevator_data, next);
 }
 
 static void simple_merged_request(struct request_queue *q,
@@ -122,7 +122,7 @@ simple_merge(struct request_queue *q, struct request **req, struct bio *bio)
 
 	__rq = elv_rb_find(&sd->sort_list, sector);
 	if (__rq) {
-		BUG_ON(sector != blk_rq_pos(__rq));
+		//BUG_ON(sector != blk_rq_pos(__rq));
 
 		if (elv_rq_merge_ok(__rq, bio)) {
 			ret = ELEVATOR_FRONT_MERGE;
@@ -142,18 +142,21 @@ out:
 static void simple_add_request(struct request_queue *q, struct request *rq)
 {
 	struct simple_data *sd = q->elevator->elevator_data;
+	printk("simple add request\n");
 	simple_add_rq_rb(sd, rq);
 }
 
 static int simple_queue_empty(struct request_queue *q)
 {
 	struct simple_data *sd = q->elevator->elevator_data;
+	printk("simple_queue_emtpy\n");
 	return RB_EMPTY_ROOT(&sd->sort_list);
 }
 
 static void simple_exit_queue(struct elevator_queue *e)
 {
 	struct simple_data *sd = e->elevator_data;
+	printk("simple exit queue\n");
 
 	kfree(sd);
 }
@@ -161,6 +164,7 @@ static void simple_exit_queue(struct elevator_queue *e)
 static void *simple_init_queue(struct request_queue *q)
 {
 	struct simple_data *sd;
+	printk("simple init queue\n");
 	sd = kmalloc_node(sizeof(*sd), GFP_KERNEL | __GFP_ZERO, q->node);
 	if (!sd)
 		return NULL;
@@ -192,12 +196,14 @@ static struct elevator_type iosched_simple = {
 
 static int __init simple_init(void)
 {
+	printk(KERN_INFO "simple_init\n");
 	elv_register(&iosched_simple);
 	return 0;
 }
 
 static void __exit simple_exit(void)
 {
+	printk(KERN_INFO "simple_exit\n");
 	elv_unregister(&iosched_simple);
 }
 

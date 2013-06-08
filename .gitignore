@@ -7,3 +7,11 @@ algorithms/homework6/HashInt.txt
 algorithms/homework6/Median.txt
 *.swp
 *.d
+*.cmd
+*.o
+*.ko
+*.mod.c
+*.order
+Module.markers
+Module.symvers
+.tmp_versions
