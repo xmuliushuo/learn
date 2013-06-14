@@ -1,1 +1,4 @@
 linux_kernel:
+linux:
+	LockMem.cpp: 提供了锁定内存用的函数
+	seqTest.cpp: 用来测试磁盘顺序读性能
