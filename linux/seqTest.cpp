@@ -13,16 +13,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "utils.h"
+
 using namespace std;
 
 
 static const int K = 1024;
 
-extern int LockMem(int size);
-
-static off_t getFileLength(const string);
-//static bool getFileNamesInDir(const string strDir, vector<string> &vecFileName);
-static double timeDiff(const struct timeval&, const struct timeval&);
 
 int main(int argc, char *argv[])
 {
@@ -77,28 +74,11 @@ int main(int argc, char *argv[])
 	}
 	close(fd);
 	gettimeofday(&endTime, NULL);
-    filelength = getFileLength(filename);
-	double diffall = timeDiff(startTime, endTime);
+    filelength = GetFileLength(filename);
+	double diffall = TimeDiff(startTime, endTime);
 	double total = filelength / 1024;
     cout << "Time: " << diffall << endl;
 	cout << "Speed: " << total / diffall << "KB/s" << endl;
 
 	return 0;
-}
-
-static off_t getFileLength(const string filename)
-{
-	struct stat st;
-	if (lstat(filename.c_str(), &st) != 0) {
-		cout << "Error: lstat error" << endl;
-		exit(1);
-	}
-	return st.st_size;
-}
-
-static double 
-timeDiff(const struct timeval &startTime, const struct timeval &endTime)
-{
-	return ((endTime.tv_sec - startTime.tv_sec) * 1000000 + 
-		(endTime.tv_usec - startTime.tv_usec)) / 1000000.0;
 }
