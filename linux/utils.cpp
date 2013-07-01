@@ -2,7 +2,7 @@
 
 using namespace std;
 
-int LockMem(const unsigned int size)
+int LockMem(int size)
 {
 	assert(size > 0);
 
@@ -52,7 +52,8 @@ TimeDiff(const struct timeval &startTime, const struct timeval &endTime)
 		(endTime.tv_usec - startTime.tv_usec)) / 1000000.0;
 }
 
-bool GetFileNamesInDir(const string &strDir, vector<string> &vecFileName, off_t fileLength)
+bool GetFileNamesInDir(const string &strDir, vector<string> &vecFileName, 
+	off_t fileLength)
 {
 	DIR* dir = NULL;
 	struct dirent entry;
@@ -75,7 +76,8 @@ bool GetFileNamesInDir(const string &strDir, vector<string> &vecFileName, off_t 
 			if ("." == strFileName || ".." == strFileName) {
 			}
 			else {
-				if (GetFileLength(strRealPath + "/" + strFileName) == fileLength) {
+				if (GetFileLength(strRealPath + "/" + strFileName) 
+						== fileLength) {
 					vecFileName.push_back(strRealPath + "/" + strFileName);
 				}
 			}
@@ -83,7 +85,8 @@ bool GetFileNamesInDir(const string &strDir, vector<string> &vecFileName, off_t 
 		else if(entry.d_type == DT_DIR) {
 			string dir = entry.d_name;
 			if (!("." == dir || ".." == dir)) {
-				GetFileNamesInDir(strRealPath + "/" + dir, vecFileName, fileLength);
+				GetFileNamesInDir(strRealPath + "/" + dir, 
+					vecFileName, fileLength);
 			}
 		}
 		readdir_r(dir, &entry, &entryPtr);
