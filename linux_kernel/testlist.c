@@ -19,6 +19,7 @@ int main()
 	struct request *rq = NULL;
 	struct request *_rq, *temprq;
 	int temp;
+	int found = 0;
 	INIT_LIST_HEAD(&vd.fifo_list);
 	while (1) {
 		printf("input an int:\n");
@@ -30,12 +31,39 @@ int main()
 			exit(1);
 		}
 		rq->timeout = temp;
-		list_add_tail(&rq->queue, &vd.fifo_list);
+		//list_add_tail(&rq->queue, &vd.fifo_list);
+		found = 0;
 		list_for_each_entry_safe_reverse(_rq, temprq, &vd.fifo_list, queue) {
-			printf("%d ", _rq->timeout);
+			// printf("%d ", _rq->timeout);
+			if (_rq->timeout <= temp) {
+				found = 1;
+				break;
+			}
+		}
+		if (found == 1)
+			list_add(&rq->queue, &_rq->queue);
+		else
+			list_add(&rq->queue, &vd.fifo_list);
+		if (rq->queue.next != &vd.fifo_list) {
+			_rq = list_entry(rq->queue.next, struct request, queue);
+			if (rq->timeout >= (_rq->timeout - 1)) --rq->timeout;
+		}
+		temp = rq->timeout;
+		printf("temp: %d\n", temp);
+		if (rq->queue.prev != &vd.fifo_list) {
+			_rq = list_entry(rq->queue.prev, struct request, queue);
+			while (1) {
+				if (_rq->timeout >= (temp - 1)) {
+					_rq->timeout = temp - 2;
+					temp -= 2;
+					if (_rq->queue.prev == &vd.fifo_list) break;
+					_rq = list_entry(_rq->queue.prev, struct request, queue);
+				}
+				else break;
+			}
 		}
 		printf("\n");
-		//display(&vd);
+		display(&vd);
 	}
 	return 0;
 }
