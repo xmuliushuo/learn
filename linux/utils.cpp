@@ -34,18 +34,18 @@ int LockMem(int size)
 	return ret;
 }
 
-off_t GetFileLength(const string &filename)
+inline off_t GetFileLength(const string &filename)
 {
 	struct stat st;
 	if (lstat(filename.c_str(), &st) != 0) {
 		cout << "Error: lstat error" << endl;
-		return -1;
-		//exit(1);
+		//return -1;
+		exit(1);
 	}
 	return st.st_size;
 }
 
-double 
+inline double 
 TimeDiff(const struct timeval &startTime, const struct timeval &endTime)
 {
 	return ((endTime.tv_sec - startTime.tv_sec) * 1000000 + 
@@ -93,4 +93,39 @@ bool GetFileNamesInDir(const string &strDir, vector<string> &vecFileName,
 	}
 
 	return true;
+}
+
+void TimeSubstract(const struct timeval &tv1, const struct timeval &tv2, 
+	struct timeval &tvres)
+{
+	const struct timeval *tmptv1, *tmptv2;  
+	if (TimeCompare(tv1, tv2) > 0) {
+		tmptv1 = &tv1;
+		tmptv2 = &tv2;
+	}
+	else {
+		tmptv1 = &tv2;
+		tmptv2 = &tv1;
+	}
+	if (tmptv1->tv_usec < tmptv2->tv_usec) {
+		tvres.tv_sec = tmptv1->tv_sec - tmptv2->tv_sec - 1;
+		tvres.tv_usec = tmptv1->tv_usec + 1000000 - tmptv2->tv_usec;
+	} else {
+		tvres.tv_sec = tmptv1->tv_sec - tmptv2->tv_sec;  
+		tvres.tv_usec = tmptv1->tv_usec - tmptv2->tv_usec;  
+	}
+}
+
+int TimeCompare(const struct timeval &tv1, const struct  timeval &tv2)
+{
+	if (tv1.tv_sec > tv2.tv_sec)  
+		return 1;  
+	else if (tv1.tv_sec < tv2.tv_sec)  
+		return -1;  
+	else if (tv1.tv_usec > tv2.tv_usec)  
+		return 1;  
+	else if (tv1.tv_usec < tv2.tv_usec)  
+		return -1;  
+	else  
+		return 0; 
 }

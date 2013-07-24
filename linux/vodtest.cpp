@@ -2,10 +2,24 @@
 
 using namespace std;
 
+void * testThread(void *arg);
+
 const int defaultBlockSize = 10485760;
 const int defaultThreadNum = 1;
 const string defaultFileDir = "./";
 const int defaultLockMemGB = 0;
+const int DefaultTestTime = 60;
+
+int *read_per_thread;
+int *timeout_per_thread;
+
+struct ThreadArg {
+	int id;
+	int period;
+	int blocksize;
+	int testtime;
+	vector<string> *filenames;
+};
 
 int main(int argc, char *argv[])
 {
@@ -13,11 +27,12 @@ int main(int argc, char *argv[])
 	string filedir = defaultFileDir;
 	int lockMemGB = defaultLockMemGB;
 	int blockSize = defaultBlockSize;
+	int testtime = DefaultTestTime;
 
 	int result;
-	while ((result = getopt(argc, argv, "t:d:m:hb:")) != -1) {
+	while ((result = getopt(argc, argv, "n:d:m:hb:t:")) != -1) {
 		switch (result) {
-		case 't':
+		case 'n':
 			threadNum = atoi(optarg);
 			assert(threadNum > 0);
 			break;
@@ -32,12 +47,16 @@ int main(int argc, char *argv[])
 			blockSize = atoi(optarg);
 			assert(blockSize > 0);
 			break;
+		case 't':
+			testtime = atoi(optarg);
+			assert(testtime > 0);
 		case 'h':	
 			cout << "Usage: vodtest [option]" << endl;
-			cout << "-t <threadnum>, default: " << defaultThreadNum << endl;
+			cout << "-n <threadnum>, default: " << defaultThreadNum << endl;
 			cout << "-d <filedir>, default: " << defaultFileDir << endl;
 			cout << "-m <lockMemGB>, default: " << defaultLockMemGB << endl;
 			cout << "-b <blocksize>, default: " << defaultBlockSize << endl;
+			cout << "-t <testtime>, default: " << DefaultTestTime << endl;
 			cout << "-h, output this message" << endl;
 			return 0;
 		default:
@@ -48,6 +67,10 @@ int main(int argc, char *argv[])
 	cout << "File Dir: " << filedir << endl;
 	cout << "Lock Memeory(GB): " << lockMemGB << endl;
 	cout << "Block Size(byte): " << blocksize << endl;
+	cout << "Test Time(s): " << testtime << endl;
+
+	read_per_thread = new int[threadNum]();
+	timeout_per_thread = new int[threadNum]();
 
 	/*
 	 * lock memory
@@ -76,10 +99,62 @@ int main(int argc, char *argv[])
 	cout << "Find " << filenames.size() << " test files" << endl; 
 
 	for(int i = 0; i < threadNum; ++i) {
-		// testArg * threadarg = new targ();
-		// threadarg->id = i;
-		// threadarg->filenames = &filenames;
-		// createDettachThread(tid, testThread, (void*)threadarg);
+		ThreadArg *threadarg = new ThreadArg();
+		threadarg->id = i;
+		threadarg->period = 4;
+		threadarg->blocksize = blockSize;
+		threadarg->filenames = &filenames;
+		threadarg->testtime = testtime;
+		pthread_t tid;
+		if (pthread_create(&tid, NULL, TestThread, threadarg) != 0) {
+			cout << "Error: pthread_create error." << endl;
+			return 1;
+		}
 	}
 	return 0;
+}
+
+void *TestThread(void *_arg)
+{
+	if (pthread_detach(pthread_self()) != 0) {
+		cout << "Error: pthread_detach error." << endl;
+		return (void *)1;
+	}
+	ThreadArg *arg = (ThreadArg *)_arg;
+	vector<string> &filenames = *(arg->filenames);
+	int blocksize = arg->blocksize;
+	int threadid = arg->id;
+	char *buf = new char[blocksize];
+	struct timeval starttime, begintime, endtime;
+	gettimeofday(&starttime, NULL);
+	int i, fd, filenum = filenames.size();
+	double diffsec, diffall;
+	while (true) {
+		i = rand() % filenum;
+		string name = filenames[i];
+		gettimeofday(&begintime, NULL);
+		fd = open(name.c_str(), O_RDONLY);
+		if (fd < 0) {
+			cout << "Error: open file error." << endl;
+			return (void *)1;
+		}
+		if (read(fd, buf, blocksize) != blocksize) {
+			cout << "Error: read error." << endl;
+			return (void *)1;
+		}
+		close(fd);
+		++read_per_thread[threadid];
+		gettimeofday(&endtime, NULL);
+		diffsec = TimeDiff(begintime, endtime);
+		diffall = TimeDiff(starttime, endtime);
+		if (diffsec > arg->period) {
+			++timeout_per_thread[threadid];
+		} else {
+			// TODO sleep here
+		}
+		if (diffall > arg->testtime) {
+			break;
+		}
+	}
+	return (void *)0;
 }
