@@ -58,7 +58,7 @@ void * testThread(void * arg)
 	vector<string> &filenames = *(testarg->filenames);
 
 	int i, filenum = filenames.size();
-	struct timeval startTime, endTime, lastTime;
+	struct timeval startTime, endTime, beginTime;
 	size_t filelength = 0, totalread = 0, secread = 0;
 	char *buf = new char[blockSize];
 
@@ -71,7 +71,8 @@ void * testThread(void * arg)
 	while(true) {
 		i = rand() % filenum;
 		string name = filenames[i];
-		
+		syscall(299, 3900);
+		gettimeofday(&beginTime, 0);
 		fd = open(name.c_str(), O_RDONLY);
 		if (fd < 0) { 
 			cout << "Error: open file error!" << endl;
@@ -96,14 +97,27 @@ void * testThread(void * arg)
 		close(fd);
 
 		gettimeofday(&endTime, NULL);
-		// double diffsec = timeDiff(lastTime, endTime);
+		double diffsec = timeDiff(beginTime, endTime);
 		double diffall = timeDiff(startTime, endTime);
 		readPerThread[threadid] += 1;
 		if (diffall > acctime){
 		//	cout << "thread " << threadid << " times out." << endl; 
 			break;
 		}
-        usleep(100000);
+		if (diffsec > 4) {
+			cout << "timeout: " << diffsec << endl;
+			//usleep(1000);
+		}
+		else {
+			double left = 4 - diffsec;
+			if (left > 1) {
+		//		printf("sleep %d", (int)left);
+				sleep((int)left);
+			}
+		//	printf("usleep %")
+			usleep((left - (int)left) * 1000000);
+		}
+        //usleep(50000);
 	}
 	return (void *)0;
 }
@@ -178,7 +192,7 @@ int main(int argc, char *argv[])
 	sleep(acctime + 10);
 	int readTotal = 0;
 	for (int i = 0; i < threadNum; ++i) {
-		//cout << "Thread " << i << " read " << readPerThread[i] << endl;
+		cout << "Thread " << i << " read " << readPerThread[i] << endl;
 		readTotal += blockSize / 1024 * readPerThread[i];
 	}
 	double speed = ((double)readTotal) / 1024.0 / (double)acctime;
@@ -188,4 +202,60 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+static off_t getFileLength(const string filename)
+{
+	struct stat st;
+	if (lstat(filename.c_str(), &st) != 0) {
+		cout << "Error: lstat error" << endl;
+		exit(1);
+	}
+	return st.st_size;
+}
+
+static bool getFileNamesInDir(const string strDir, vector<string> &vecFileName)
+{
+	DIR* dir = NULL;
+	struct dirent entry;
+	struct dirent* entryPtr = NULL;
+	char realPath[1024];
+	realpath(strDir.c_str(), realPath);
+	string strRealPath = realPath;
+
+	dir = opendir(realPath);
+	if (NULL == dir) {
+		cout << strerror(errno) << ", strDir : " << strDir << endl;
+		return false;
+	}
+
+	readdir_r(dir, &entry, &entryPtr);
+	while (entryPtr != NULL) {
+		if (entry.d_type == DT_REG) {
+			string strFileName = entry.d_name;
+			if ("." == strFileName || ".." == strFileName) {
+			}
+			else {
+				if (getFileLength(strRealPath + "/" + strFileName) == blockSize) {
+					vecFileName.push_back(strRealPath + "/" + strFileName);
+				}
+			}
+		}
+		else if(entry.d_type == DT_DIR) {
+			string dir = entry.d_name;
+			if (!("." == dir || ".." == dir)) {
+				getFileNamesInDir(strRealPath + "/" + dir, vecFileName);
+			}
+		}
+		readdir_r(dir, &entry, &entryPtr);
+	}
+
+	return true;
+}
+
+
+static double 
+timeDiff(const struct timeval &startTime, const struct timeval &endTime)
+{
+	return ((endTime.tv_sec - startTime.tv_sec) * 1000000 + 
+		(endTime.tv_usec - startTime.tv_usec)) / 1000000.0;
+}
 

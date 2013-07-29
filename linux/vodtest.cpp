@@ -1,8 +1,11 @@
+#include <fcntl.h>
+#include <pthread.h>
+
 #include "utils.h"
 
 using namespace std;
 
-void * testThread(void *arg);
+void * TestThread(void *arg);
 
 const int defaultBlockSize = 10485760;
 const int defaultThreadNum = 1;
@@ -66,7 +69,7 @@ int main(int argc, char *argv[])
 	cout << "Thread Number: " << threadNum << endl;
 	cout << "File Dir: " << filedir << endl;
 	cout << "Lock Memeory(GB): " << lockMemGB << endl;
-	cout << "Block Size(byte): " << blocksize << endl;
+	cout << "Block Size(byte): " << blockSize << endl;
 	cout << "Test Time(s): " << testtime << endl;
 
 	read_per_thread = new int[threadNum]();
@@ -111,6 +114,16 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 	}
+	sleep(testtime + 10);
+	int read_total = 0;
+	int timeout_total = 0;
+	for (int i = 0; i < threadNum; ++i) {
+		read_total+= blockSize / 1024 * read_per_thread[i];
+		timeout_total += timeout_per_thread[i];
+	}
+	double speed = ((double)read_total) / 1024.0 / testtime;
+	cout << "Total speed: " << speed << endl;
+	cout << "Timeout: " << timeout_total << endl;
 	return 0;
 }
 
@@ -133,6 +146,7 @@ void *TestThread(void *_arg)
 		i = rand() % filenum;
 		string name = filenames[i];
 		gettimeofday(&begintime, NULL);
+		//syscall(299, arg->period * 1000 - 100);
 		fd = open(name.c_str(), O_RDONLY);
 		if (fd < 0) {
 			cout << "Error: open file error." << endl;
@@ -152,6 +166,7 @@ void *TestThread(void *_arg)
 		} else {
 			// TODO sleep here
 		}
+		usleep(50000);
 		if (diffall > arg->testtime) {
 			break;
 		}
