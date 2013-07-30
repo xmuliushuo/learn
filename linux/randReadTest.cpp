@@ -25,6 +25,9 @@ static off_t getFileLength(const string);
 static bool getFileNamesInDir(const string strDir, vector<string> &vecFileName);
 static double timeDiff(const struct timeval&, const struct timeval&);
 
+struct timeval global_start_time, global_end_time; 
+pthread_mutex_t lock;
+
 typedef struct targ {
 	int id;
 	vector<string> * filenames;
@@ -122,6 +125,9 @@ void * testThread(void * arg)
 		// }
         usleep(50000);
 	}
+	pthread_mutex_lock(&lock);
+	gettimeofday(&global_end_time , NULL);
+	pthread_mutex_unlock(&lock);
 	return (void *)0;
 }
 
@@ -142,6 +148,8 @@ int main(int argc, char *argv[])
 	acctime = atoi(argv[3]);
 	blockSize = atoll(argv[4]);
 	memoryBlockGB = atoi(argv[5]);
+
+	pthread_mutex_init(&lock, NULL);
 
 	// 锁定内存
 	size_t totalSize = K * K * K * memoryBlockGB;
@@ -184,7 +192,7 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 	cout << "Find " << filenames.size() << " test files" << endl; 
-
+	gettimeofday(&global_start_time , NULL);
 	for(int i = 0; i < threadNum; ++i) {
 		testArg * threadarg = new targ();
 		threadarg->id = i;
@@ -193,13 +201,14 @@ int main(int argc, char *argv[])
 	}
 
 	sleep(acctime + 10);
+	double total_time = timeDiff(global_start_time, global_end_time);
 	int readTotal = 0;
 	for (int i = 0; i < threadNum; ++i) {
 		cout << "Thread " << i << " read " << readPerThread[i] << endl;
 		readTotal += blockSize / 1024 * readPerThread[i];
 	}
-	double speed = ((double)readTotal) / 1024.0 / (double)acctime;
-	cout << "Total speed: " << speed << endl;
+	double speed = ((double)readTotal) / 1024.0 / total_time;
+	cout << "Total speed: " << speed << " in " << total_time << " seconds." << endl;
 	munlockall();
 
 	return 0;
