@@ -71,7 +71,9 @@ void * testThread(void * arg)
 	while(true) {
 		i = rand() % filenum;
 		string name = filenames[i];
-		syscall(299, 3900);
+		syscall(299, 3800);
+		cout << threadid << " " << readPerThread[threadid] 
+			<< " start: " << syscall(300) << endl;
 		gettimeofday(&beginTime, 0);
 		fd = open(name.c_str(), O_RDONLY);
 		if (fd < 0) { 
@@ -95,7 +97,8 @@ void * testThread(void * arg)
 			}
 		}*/
 		close(fd);
-
+		cout << threadid << " " << readPerThread[threadid] 
+			<< " end: " << syscall(300) << endl;
 		gettimeofday(&endTime, NULL);
 		double diffsec = timeDiff(beginTime, endTime);
 		double diffall = timeDiff(startTime, endTime);
@@ -108,16 +111,16 @@ void * testThread(void * arg)
 			cout << "timeout: " << diffsec << endl;
 			//usleep(1000);
 		}
-		else {
-			double left = 4 - diffsec;
-			if (left > 1) {
-		//		printf("sleep %d", (int)left);
-				sleep((int)left);
-			}
-		//	printf("usleep %")
-			usleep((left - (int)left) * 1000000);
-		}
-        //usleep(50000);
+		// else {
+		// 	double left = 4 - diffsec;
+		// 	if (left > 1) {
+		// //		printf("sleep %d", (int)left);
+		// 		sleep((int)left);
+		// 	}
+		// //	printf("usleep %")
+		// 	usleep((left - (int)left) * 1000000);
+		// }
+        usleep(50000);
 	}
 	return (void *)0;
 }
