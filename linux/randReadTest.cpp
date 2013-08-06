@@ -75,7 +75,7 @@ void * testThread(void * arg)
 	while(true) {
 		i = rand() % filenum;
 		string name = filenames[i];
-		syscall(299, 3000);
+		syscall(299, 3600);
 		latency_start = syscall(300);
 		gettimeofday(&beginTime, 0);
 		fd = open(name.c_str(), O_RDONLY);
@@ -107,6 +107,9 @@ void * testThread(void * arg)
 //			cout << "timeout: " << diffsec << endl;
 			++timeout_per_thread[threadid];
 		}
+		pthread_mutex_lock(&lock);
+		cout << name << "," << diffall << "," << diffsec << endl;
+		pthread_mutex_unlock(&lock);
 		// else {
 		// 	double left = 4 - diffsec;
 		// 	if (left > 1) {
