@@ -18,6 +18,7 @@ using namespace std;
 static int acctime;
 static size_t blockSize;
 int *readPerThread;
+int *timeout_per_thread;
 
 static const int K = 1024;
 
@@ -66,17 +67,16 @@ void * testThread(void * arg)
 	char *buf = new char[blockSize];
 
 	gettimeofday(&startTime, NULL);
-	// lastTime.tv_sec = startTime.tv_sec;
-	// lastTime.tv_usec = startTime.tv_usec;
 
 	int fd;
+	int latency_start;
+	int latency_end;
 
 	while(true) {
 		i = rand() % filenum;
 		string name = filenames[i];
-		syscall(299, 3800);
-		cout << threadid << " " << readPerThread[threadid] 
-			<< " start: " << syscall(300) << endl;
+		syscall(299, 3600);
+		latency_start = syscall(300);
 		gettimeofday(&beginTime, 0);
 		fd = open(name.c_str(), O_RDONLY);
 		if (fd < 0) { 
@@ -86,22 +86,15 @@ void * testThread(void * arg)
         
 		if (read(fd, buf, blockSize) != blockSize) {
 			cout << "Error: read file error!" << endl;
-		    return (void *)1;
+			return (void *)1;
 		}
-       /*
-		int filelength = blockSize;
-		while(filelength > 0) {
-			if (filelength >= 4096) {
-				read(fd, buf, 4096);
-				filelength -= 4096;
-			} else {
-				read(fd, buf, filelength);
-				filelength = 0;
-			}
-		}*/
 		close(fd);
-		cout << threadid << " " << readPerThread[threadid] 
-			<< " end: " << syscall(300) << endl;
+		latency_end = syscall(300);
+		syscall(299, 0);
+	/*	cout << threadid << " " << readPerThread[threadid] 
+			<< " start: " << latency_start
+			<< " end: " << latency_end
+			<< " now: " << syscall(300) << endl;*/
 		gettimeofday(&endTime, NULL);
 		double diffsec = timeDiff(beginTime, endTime);
 		double diffall = timeDiff(startTime, endTime);
@@ -111,19 +104,20 @@ void * testThread(void * arg)
 			break;
 		}
 		if (diffsec > 4) {
-			cout << "timeout: " << diffsec << endl;
-			//usleep(1000);
+//			cout << "timeout: " << diffsec << endl;
+			++timeout_per_thread[threadid];
 		}
+		pthread_mutex_lock(&lock);
+		cout << name << "," << diffall << "," << diffsec << endl;
+		pthread_mutex_unlock(&lock);
 		// else {
 		// 	double left = 4 - diffsec;
 		// 	if (left > 1) {
-		// //		printf("sleep %d", (int)left);
 		// 		sleep((int)left);
 		// 	}
-		// //	printf("usleep %")
 		// 	usleep((left - (int)left) * 1000000);
 		// }
-        usleep(50000);
+		usleep(50000);
 	}
 	pthread_mutex_lock(&lock);
 	gettimeofday(&global_end_time , NULL);
@@ -145,6 +139,7 @@ int main(int argc, char *argv[])
 	string datadir(argv[1]);
 	threadNum = atoi(argv[2]);
 	readPerThread = new int[threadNum]();
+	timeout_per_thread = new int[threadNum]();
 	acctime = atoi(argv[3]);
 	blockSize = atoll(argv[4]);
 	memoryBlockGB = atoi(argv[5]);
@@ -203,12 +198,18 @@ int main(int argc, char *argv[])
 	sleep(acctime + 10);
 	double total_time = timeDiff(global_start_time, global_end_time);
 	int readTotal = 0;
+	int timeout_total = 0;
+	int times_total = 0;
 	for (int i = 0; i < threadNum; ++i) {
 		cout << "Thread " << i << " read " << readPerThread[i] << endl;
 		readTotal += blockSize / 1024 * readPerThread[i];
+		timeout_total += timeout_per_thread[i];
+		times_total += readPerThread[i];
 	}
 	double speed = ((double)readTotal) / 1024.0 / total_time;
 	cout << "Total speed: " << speed << " in " << total_time << " seconds." << endl;
+	cout << "Total read: " << times_total << endl; 
+	cout << "Total timeout: " << timeout_total << endl;
 	munlockall();
 
 	return 0;
