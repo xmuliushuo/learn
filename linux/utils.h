@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <dirent.h>
 #include <assert.h>
+#include <stdio.h>
+#include <fcntl.h>
 
 #include <iostream>
 #include <cstdlib>
@@ -30,6 +32,16 @@ TimeDiff(const struct timeval &startTime, const struct timeval &endTime)
 {
 	return ((endTime.tv_sec - startTime.tv_sec) * 1000000 + 
 		(endTime.tv_usec - startTime.tv_usec)) / 1000000.0;
+}
+
+inline int Open(const char* filename, int oflag)
+{
+	int ret = open(filename, oflag);
+	if (ret < 0) {
+		perror(filename);
+		exit(1);
+	}
+	return ret;
 }
 
 #endif
