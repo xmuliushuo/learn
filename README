@@ -3,5 +3,6 @@ linux:
 	LockMem.cpp: 提供了锁定内存用的函数
 	seqTest.cpp: 用来测试磁盘顺序读性能
 	log.h: 一个简单的日志系统
+	rand_read_test.cpp：用于在一个大文件中进行多线程的读取测试
 cplusplus:
 	sizeof.cpp: 用于测试sizeof
