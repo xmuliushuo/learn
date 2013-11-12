@@ -85,7 +85,7 @@ void * testThread(void * arg)
 		// syscall(299, 3600);
 		// latency_start = syscall(300);
 		gettimeofday(&beginTime, 0);
-		
+		lseek(fd, i, SEEK_SET);
 		if (read(fd, buf, blockSize) != blockSize) {
 			cout << "Error: read file error!" << endl;
 			return (void *)1;
@@ -104,9 +104,8 @@ void * testThread(void * arg)
 			++timeout_per_thread[threadid];
 		}
 		pthread_mutex_lock(&lock);
-		cout << diffall << "," << diffsec << endl;
+		cout << i << "," << diffall << "," << diffsec << endl;
 		pthread_mutex_unlock(&lock);
-		usleep(50000);
 	}
 	close(fd);
 	pthread_mutex_lock(&lock);

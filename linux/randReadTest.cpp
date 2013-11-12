@@ -107,9 +107,9 @@ void * testThread(void * arg)
 //			cout << "timeout: " << diffsec << endl;
 			++timeout_per_thread[threadid];
 		}
-		pthread_mutex_lock(&lock);
-		cout << name << "," << diffall << "," << diffsec << endl;
-		pthread_mutex_unlock(&lock);
+		// pthread_mutex_lock(&lock);
+		// cout << name << "," << diffall << "," << diffsec << endl;
+		// pthread_mutex_unlock(&lock);
 		// else {
 		// 	double left = 4 - diffsec;
 		// 	if (left > 1) {
@@ -201,15 +201,16 @@ int main(int argc, char *argv[])
 	int timeout_total = 0;
 	int times_total = 0;
 	for (int i = 0; i < threadNum; ++i) {
-		cout << "Thread " << i << " read " << readPerThread[i] << endl;
+		// cout << "Thread " << i << " read " << readPerThread[i] << endl;
 		readTotal += blockSize / 1024 * readPerThread[i];
 		timeout_total += timeout_per_thread[i];
 		times_total += readPerThread[i];
 	}
 	double speed = ((double)readTotal) / 1024.0 / total_time;
-	cout << "Total speed: " << speed << " in " << total_time << " seconds." << endl;
-	cout << "Total read: " << times_total << endl; 
-	cout << "Total timeout: " << timeout_total << endl;
+	cout << threadNum << "," << speed << endl;
+	// cout << "Total speed: " << speed << " in " << total_time << " seconds." << endl;
+	// cout << "Total read: " << times_total << endl; 
+	// cout << "Total timeout: " << timeout_total << endl;
 	munlockall();
 
 	return 0;
