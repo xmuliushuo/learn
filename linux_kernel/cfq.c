@@ -336,7 +336,7 @@ static inline int cfq_prio_slice(struct cfq_data *cfqd, bool sync,
 	const int base_slice = cfqd->cfq_slice[sync];
 
 	WARN_ON(prio >= IOPRIO_BE_NR);
-	//CFQ_SLICE_SCALE=5
+	// CFQ_SLICE_SCALE=5
 	return base_slice + (base_slice/CFQ_SLICE_SCALE * (4 - prio));
 }
 

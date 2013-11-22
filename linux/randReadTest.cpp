@@ -103,10 +103,10 @@ void * testThread(void * arg)
 		//	cout << "thread " << threadid << " times out." << endl; 
 			break;
 		}
-		if (diffsec > 4) {
+		// if (diffsec > 4) {
 //			cout << "timeout: " << diffsec << endl;
-			++timeout_per_thread[threadid];
-		}
+			// ++timeout_per_thread[threadid];
+		// }
 		// pthread_mutex_lock(&lock);
 		// cout << name << "," << diffall << "," << diffsec << endl;
 		// pthread_mutex_unlock(&lock);
@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 			<<  "\tNeed add test file first ." << endl;
 		exit(-1);
 	}
-	cout << "Find " << filenames.size() << " test files" << endl; 
+	// cout << "Find " << filenames.size() << " test files" << endl; 
 	gettimeofday(&global_start_time , NULL);
 	for(int i = 0; i < threadNum; ++i) {
 		testArg * threadarg = new targ();
