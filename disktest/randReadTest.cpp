@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 			<<  "\tNeed add test file first ." << endl;
 		exit(-1);
 	}
-	cout << "Find " << filenames.size() << " test files" << endl; 
+//	cout << "Find " << filenames.size() << " test files" << endl; 
 	gettimeofday(&global_start_time , NULL);
 	for(int i = 0; i < threadNum; ++i) {
 		testArg * threadarg = new targ();
