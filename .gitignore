@@ -16,3 +16,4 @@ Module.markers
 Module.symvers
 .tmp_versions
 vodtest
+.idea/*
